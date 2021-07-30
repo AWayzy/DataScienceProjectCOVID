@@ -1,0 +1,44 @@
+Report Layout:
+
+Abstract:
+    do when done
+    
+Introduction:
+    intro
+    
+Datasets:
+    Talk about datasets used
+    talk about data cleaning and manipulation
+    
+Visualizations:
+    Relative Proportion of total cases by state
+    Cases by Sex
+    Cases by Age Group
+    Cases by Ethnicity
+    
+    Cases/Percentage of deaths by pre-existing conditions
+    
+    Cases by Vaccine HESITATION
+    Cases by Vaccine Allocation
+        Talk about process to add an in effect date to data
+        
+Math / Formulas
+    Perform PCA on data
+        By state - include total cases, deaths, create a mortality ratio variable, vaccine deployment if accessible, 
+        
+    Talk about limitations of mathematical epidemiology, why you cannot fit a simple model to predict cases.
+    
+    Maybe LDA to predict if someone will die? Given age group, pre-existing conditions, etc
+        
+    
+    
+    
+    
+    
+Conclusion:
+
+Acknowledgements:
+
+Appendix: 
+
+Bibliography:

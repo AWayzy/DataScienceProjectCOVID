@@ -1,0 +1,35 @@
+REFERENCES
+
+STATE ABBREV CSV: https://worldpopulationreview.com/states/state-abbreviations
+
+US TERRITORY INFO: https://stamps.custhelp.com/app/answers/detail/a_id/4377/~/us-territory-and-possession-address-abbreviations
+
+CREATING TIME SERIES PLOT: https://www.r-graph-gallery.com/time-series.html
+
+HELP W DATE AXIS: https://www.datanovia.com/en/blog/ggplot-date-axis-customization/
+
+MATHEMATICAL EPIDEMIOLOGY: https://www.sciencedirect.com/science/article/pii/S2468042720300245
+
+PROBABILITY DISTRIBUTIONS: https://www.analyticsvidhya.com/blog/2017/09/6-probability-distributions-data-science/
+
+VACCINE HESITANCY: https://data.cdc.gov/stories/s/cnd2-a6zw 
+
+PNEUMONIA DEATHS ( FOR BASELINE ): https://data.cdc.gov/Health-Statistics/Deaths-from-Pneumonia-and-Influenza-P-I-and-all-de/pp7x-dyj2
+
+PNEUMONIA AND COVID: https://data.cdc.gov/NCHS/Provisional-Death-Counts-for-Influenza-Pneumonia-a/ynw2-4viq
+
+VIZUALIZATION IDEAS: https://towardsdatascience.com/data-exploration-with-the-covid-tracking-project-d89ac87342bc
+
+PFIZER VACCINE TRIALS: https://www.nejm.org/doi/10.1056/NEJMoa2034577?url_ver=Z39.88-2003&rfr_id=ori%3Arid%3Acrossref.org&rfr_dat=cr_pub++0pubmed
+
+MODERNA VACCINE TRIALS: https://www.nejm.org/doi/full/10.1056/NEJMoa2035389 
+
+PROOF OF EFFICACY TWO WEEKS AFTER: https://www.cdc.gov/coronavirus/2019-ncov/science/science-briefs/fully-vaccinated-people.html?CDC_AA_refVal=https%3A%2F%2Fwww.cdc.gov%2Fcoronavirus%2F2019-ncov%2Fmore%2Ffully-vaccinated-people.html
+
+https://tex.stackexchange.com/questions/216049/appendix-title-on-a-new-line
+
+
+ The recommended interval between doses is 21 days for Pfizer-BioNTech and 28 days for Moderna; however, up to 42 days between doses is permissible when a delay is unavoidable.:
+ https://www.cdc.gov/mmwr/volumes/70/wr/mm7011e2.htm 
+ 
+ Cite young kids less affeccted: https://www.mayoclinic.org/diseases-conditions/coronavirus/in-depth/coronavirus-in-babies-and-children/art-20484405 

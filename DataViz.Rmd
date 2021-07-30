@@ -1,0 +1,210 @@
+---
+title: "DataViz"
+author: "Austin Way"
+date: "6/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library("RSocrata")
+library(dotenv)
+
+load_dot_env()
+
+WeekSexAge <- read.socrata(
+  "https://data.cdc.gov/resource/vsak-wrfu.csv",
+  app_token = Sys.getenv("CDC_API"),
+  email     = "arway@ucdavis.edu",
+  password = Sys.getenv("Password")
+)
+  
+# https://data.cdc.gov/NCHS/Provisional-COVID-19-Deaths-by-Week-Sex-and-Age/vsak-wrfu
+
+library(tidyverse)
+
+
+DistributedVaccines <- read.socrata(
+  "https://data.cdc.gov/resource/unsk-b7fc.csv",
+  app_token = Sys.getenv("CDC_API"),
+  email     = "arway@ucdavis.edu",
+  password = Sys.getenv("Password")
+)
+
+allUS <- DistributedVaccines[which(DistributedVaccines$location == "US"),]
+
+
+
+bigDf <- read.csv("BigCaseData.csv")
+#twomil <- bigDf[sample(1:length(bigDf$cdc_case_earliest_dt), 2000000),]
+#to save the space, r was being very slow. don't need 25 million rows.
+#rm(bigDf)
+#glimpse(twomil)
+bigdf <- bigDf
+rm(bigDf)
+bigdf <- bigdf[bigdf$age_group != "Missing",]
+bigdf <- bigdf[!is.na(bigdf$age_group),]
+bigdf <- bigdf[bigdf$death_yn != "Missing",]
+bigdf <- bigdf[bigdf$death_yn != "Unknown",]
+bigdf <- bigdf[bigdf$medcond_yn != "Missing",]
+bigdf <- bigdf[bigdf$medcond_yn != "Unknown",]
+bigdf <- bigdf[bigdf$sex != "Missing" & bigdf$sex != "Unknown",]
+bigdf <- bigdf[bigdf$race_ethnicity_combined != "Unknown" & bigdf$race_ethnicity_combined != "Missing",]
+bigdf <- bigdf[bigdf$hosp_yn != "Unknown" & bigdf$hosp_yn != "Missing",]
+
+bigdf$cdc_report_dt <- as.Date(bigdf$cdc_report_dt)
+bigdf$pos_spec_dt <- as.Date(bigdf$pos_spec_dt)
+bigdf$onset_dt <- as.Date(bigdf$onset_dt)
+bigdf$cdc_case_earliest_dt <- as.Date(bigdf$cdc_case_earliest_dt)
+
+
+names(bigdf)
+
+
+```
+
+```{r}
+library(ggplot2)
+library(scales)
+library(tidyverse)
+library(mosaic)
+
+ggplot(bigdf, aes(x=cdc_case_earliest_dt)) +
+  geom_smooth(stat = "count", color = "darkblue")+
+  scale_x_date(date_breaks = "1 month", date_labels = "%b%Y")+
+  theme(axis.text.x = element_text(angle = 30))+
+  ylab("New Cases")+
+  xlab("Date")+
+  ggtitle("Overview of U.S. Covid Trends")
+
+```
+
+
+```{r}
+
+ggplot(tips, aes(x= day,  group=sex)) + 
+    geom_bar(aes(y = ..prop.., fill = factor(..x..)), stat="count") +
+    geom_text(aes( label = scales::percent(..prop..),
+                   y= ..prop.. ), stat= "count", vjust = -.5) +
+    labs(y = "Percent", fill="day") +
+    facet_grid(~sex) +
+    scale_y_continuous(labels = scales::percent)
+
+bigdf %>% 
+  filter(sex != "Other") %>% 
+  ggplot(aes(x = sex, group = sex)) + 
+    geom_histogram(show.legend = FALSE, aes(y = prop(sex), fill = factor(..x..))) +
+    ylab("Percentage of Cases") +
+    xlab("Sex") + 
+    ggtitle("Percentage of Cases by Sex") +
+    geom_text(aes(label = percent(..prop..), y = prop(sex)), vjust = 1)
+
+
+```
+
+```{r}
+
+bigdf %>% 
+  ggplot(aes(x = age_group, fill = age_group)) + 
+    geom_bar(show.legend = FALSE) +
+    scale_y_continuous(labels = comma) +
+    ylab("Number of Cases") +
+    xlab("Age Group") + 
+    ggtitle("Number of Cases by Age Group") +
+    theme(axis.text.x = element_text(angle = 30))
+
+```
+
+```{r}
+library(ggplot2)
+library(scales)
+
+allUS$new_admin <- rep(0, length(allUS$dist_per_100k))
+allUS <- allUS[order(as.Date(allUS$date)),]
+for(i in 1:length(unique(allUS$date))){
+  if(i == 1){
+    allUS$new_admin[i] = allUS$administered[i]
+  }
+  else{
+    allUS$new_admin[i] = allUS$administered[i] - allUS$administered[i-1]
+  }
+}
+
+library(plotly)
+
+bigdf %>% 
+  ggplot(aes(x = cdc_case_earliest_dt)) +
+    geom_bar(show.legend = FALSE) +
+    geom_smooth(data = allUS, aes(x = as.Date(date), y = new_admin/500), se = F) +
+    ylab("Number of Cases") +
+    xlab("Date") + 
+    ggtitle("Number of Cases and Vaccines by Date") +
+    theme(axis.text.x = element_text(angle = 30)) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b%Y")+
+    scale_y_continuous(sec.axis = sec_axis(~.*500, name="Vaccinations Given (500 to 1)", labels = comma), labels = comma) -> pp
+
+
+ggplotly(pp)
+
+```
+
+
+```{r}
+## JUNE 10th ridiculous outlier
+
+library(lubridate)
+
+test <- bigDf[which(bigDf$cdc_report_dt == as.Date(ymd("2020-06-10"))),]
+
+
+u <- subset(bigdf, select = c(sex,age_group, hosp_yn, icu_yn, death_yn, medcond_yn))
+
+```
+
+
+
+```{r}
+
+fm <- bigdf[bigdf$sex == "Female",]
+ml <- bigdf[bigdf$sex == "Male",]
+length(fm$sex)
+length(ml$sex)
+
+
+t.test(c(50.8, 49.2), c(53.6, .463833) )
+```
+
+
+
+```{r}
+
+library(ggplot2)
+
+bigdf %>%
+  ggplot(aes(x = death_yn, fill = medcond_yn))+
+  geom_bar()+
+  ylab("Number of Cases") +
+  xlab("Death") + 
+  ggtitle("Number of Deaths, Colored by Pre-Existing Conditions") +
+  scale_y_continuous(labels = comma)+
+  labs(fill = "Pre-Existing Condition")
+
+bigdf %>%
+  filter(death_yn == "Yes") %>% 
+  ggplot(aes(x = death_yn, fill = medcond_yn))+
+  geom_bar()+
+  ylab("Number of Deaths") +
+  xlab("") + 
+  ggtitle("Number of Deaths, Colored by Pre-Existing Conditions") +
+  scale_y_continuous(labels = comma)+
+  labs(fill = "Pre-Existing Condition")+
+  theme(axis.text.x = element_blank())
+  
+  
+
+```
+

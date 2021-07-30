@@ -1,0 +1,713 @@
+---
+title: "DataExploration"
+author: "Austin Way"
+date: "6/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dotenv)
+library(RSocrata)
+load_dot_env()
+
+df <- read.socrata(
+      "https://data.cdc.gov/resource/9mfq-cb36.csv",
+      app_token = Sys.getenv("CDC_API"),
+      email     = "arway@ucdavis.edu",
+      password  = Sys.getenv("Password") 
+  )
+
+
+names(df)
+
+length(df[!is.na(df$consent_cases),])
+df <- df[!is.na(df$consent_cases),]
+df <- df[which(df$new_case >= 0),]
+
+pop <- read.csv("State Populations.csv")
+
+
+head(pop)
+
+```
+
+```{r}
+length(unique(df$state))
+sort(unique(df$state))
+```
+
+```{r}
+
+library(tidyverse)
+abbrevs <- read.csv("csvData.csv")
+abbrevs %>% rename(
+  names = ï..State
+) -> abbrevs
+names(abbrevs)
+for(i in 1:length(unique(df$state))){
+  if(length(abbrevs[which(abbrevs$Code == unique(df$state)[[i]]),]$names) == 0){
+    print(unique(df$state)[i])
+  }
+  #else{
+  #print(abbrevs[which(abbrevs$Code == unique(df$state)[[i]]),]$names)
+  #}
+}
+```
+Places that are undefined:
+
+VI, GU, MP, RMI, PW, PR, NYC, AS, FSM
+Google Search tells us what those are
+
+```{r}
+
+
+abbrevs <- rbind(abbrevs, c("Mariana Islands",NA, "MP")) 
+abbrevs <- rbind(abbrevs, c("Marshall Islands",NA, "RMI"))
+abbrevs <- rbind(abbrevs, c("Palau",NA, "PW"))
+abbrevs <- rbind(abbrevs, c("Puerto Rico",NA, "PR"))
+abbrevs <- rbind(abbrevs, c("New York City", NA, "NYC"))
+abbrevs <- rbind(abbrevs, c("American Samoa", NA, "AS"))
+abbrevs <- rbind(abbrevs, c("Micronesia",NA,"FSM"))
+abbrevs <- rbind(abbrevs, c("Guam",NA, "GU"))
+abbrevs <- rbind(abbrevs, c("U.S. Virgin Islands",NA, "VI"))
+
+abbrevs
+
+
+
+```
+
+```{r, echo = FALSE}
+abbrevs <- subset(abbrevs, select = -c(Abbrev))
+df <- merge.data.frame(x = df, y = abbrevs, by.x = "state", by.y = "Code")
+```
+
+```{r}
+head(df)
+
+sort(df$submission_date)
+# convert to date instead of posixct
+df$submission_date = as.Date(df$submission_date)
+class(df$submission_date[1])
+
+df %>%
+  filter(df$submission_date == max(df$submission_date)) %>% 
+  ggplot(aes(x = state, y = tot_cases))+
+  geom_point()+
+  ylim(200000, 400000)+
+  geom_text(aes(label = state))
+```
+
+```{r}
+
+library(ggplot2)
+
+df %>% ggplot(aes(x = submission_date, y = new_case, color = state)) +
+  geom_point() +
+  ylim(0, max(df$new_case))
+
+
+```
+
+
+```{r}
+
+df[1:(.5*length(df$state)),] %>% 
+  filter(new_case >= 0) %>% 
+  ggplot(aes(y=state, x=submission_date, fill=new_case)) + 
+  geom_tile() +
+  scale_fill_gradient(low = "blue", high = "red")
+
+```
+
+
+adding new column: new_cases_us
+
+```{r}
+
+df$new_cases_allUS <- rep(10, nrow(df))
+df$new_deaths_allUS <- rep(10, nrow(df))
+
+for(i in 1:length(unique(df$submission_date))){
+  date <- unique(df$submission_date)[i]
+  df$new_cases_allUS[which(df$submission_date == date)] <- rep(sum(df[which(df$submission_date == date),]$new_case), 
+                                                               length(which(df$submission_date == date)))
+  df$new_deaths_allUS[which(df$submission_date == date)] <- rep(sum(df[which(df$submission_date == date),]$new_death), 
+                                                               length(which(df$submission_date == date)))
+}
+
+```
+
+trying again
+
+```{r}
+
+df %>% ggplot(aes(x = submission_date, y = new_cases_allUS)) +
+  geom_point(color = "red") +
+  geom_smooth(color = "violetred1") +
+  ylim(0, max(df$new_cases_allUS)) +
+  ylab("US New Cases") +
+  xlab("Date") +
+  ggtitle("New Cases by Date") +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))+
+  scale_x_date(date_labels = "%b%Y", date_breaks = "2 months") +
+  theme(axis.text.x = element_text(angle=45, hjust = 1))
+
+```
+
+```{r}
+PfizerAlloc <- read.socrata(
+  "https://data.cdc.gov/resource/saz5-9hgg.csv",
+  app_token = Sys.getenv("CDC_API"),
+  email     = "arway@ucdavis.edu",
+  password  = Sys.getenv("Password")
+)
+
+DernaAlloc <- read.socrata(
+  "https://data.cdc.gov/resource/b7pe-5nws.csv",
+  app_token = Sys.getenv("CDC_API"),
+  email     = "arway@ucdavis.edu",
+  password  = Sys.getenv("Password")
+)
+
+PfizerAlloc <- rename(PfizerAlloc,
+       PfizerDose1 = X_1st_dose_allocations,
+       pfizerDose2 = X_2nd_dose_allocations
+)
+
+DernaAlloc <- rename(DernaAlloc,
+       DernaDose1 = X_1st_dose_allocations,
+       DernaDose2 = X_2nd_dose_allocations
+)
+
+jointVacc <- merge(PfizerAlloc, DernaAlloc, by = c("jurisdiction","week_of_allocations"))
+
+jointVacc$totalVacc = rep(10, nrow(jointVacc))
+for(i in 1:length(unique(jointVacc$week_of_allocations))){
+  week = jointVacc$week_of_allocations[i]
+  whicht = which(jointVacc$week_of_allocations == week)
+  jointVacc$totalVacc[whicht] <- rep(sum(jointVacc[whicht,]$PfizerDose1,
+                                         jointVacc[whicht,]$pfizerDose2, 
+                                         jointVacc[whicht,]$DernaDose1,
+                                         jointVacc[whicht,]$DernaDose2), length(whicht))
+}
+
+jointVacc$week_of_allocations <- as.Date(jointVacc$week_of_allocations)
+
+```
+
+
+NOT PRETTY !
+
+```{r}
+
+ggplot() +
+  geom_point(data = df, aes(x = submission_date, y = new_cases_allUS),color = "red") +
+  geom_smooth(data = df, aes(x = submission_date, y = new_cases_allUS), color = "violetred1") +
+  ylim(0, max(df$new_cases_allUS)) +
+  ylab("US New Cases") +
+  xlab("Date") +
+  ggtitle("New Cases by Date") +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))+
+  scale_x_date(date_labels = "%b%Y", date_breaks = "2 months") +
+  theme(axis.text.x = element_text(angle=45, hjust = 1))+
+  geom_point(data = jointVacc, aes(x = as.Date(week_of_allocations), y = totalVacc / 100), color = "blue")+
+  geom_smooth(data = jointVacc, aes(x = as.Date(week_of_allocations), y = totalVacc / 100), color = "darkblue")
+
+```
+
+
+```{r}
+library(plotly)
+
+s <- ggplot() +
+  geom_smooth(data = df, aes(x = submission_date, y = new_cases_allUS), color = "violetred1") +
+  ylim(0, max(df$new_cases_allUS)) +
+  ylab("US New Cases") +
+  xlab("Date") +
+  ggtitle("New Cases by Date") +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))+
+  scale_x_date(date_labels = "%b%Y", date_breaks = "2 months") +
+  theme(axis.text.x = element_text(angle=45, hjust = 1))+
+  geom_smooth(data = jointVacc, aes(x = as.Date(week_of_allocations), y = totalVacc / 100), color = "darkblue")
+
+ggplotly(s)
+
+```
+
+
+```{r}
+
+#remove chicago, Federal Entities, Philidelphia
+dim(jointVacc)
+jointVacc <- jointVacc[which(jointVacc$jurisdiction != "Chicago"),]
+jointVacc <- jointVacc[which(jointVacc$jurisdiction != "Federal Entities"),]
+jointVacc <- jointVacc[which(jointVacc$jurisdiction != "Philadelphia"),]
+
+dim(df)
+useDf <- merge(df, jointVacc, by.x = "names", by.y = "jurisdiction")
+useDf <- subset(useDf, select = -c(conf_cases,prob_cases,tot_cases,pnew_case,tot_death,prob_death,pnew_death,created_at,consent_cases,consent_deaths))
+dim(useDf)
+test <- as.data.frame(df$submission_date)
+test$week2020 <- rep(10, length(test))
+test$week2021 <- rep(10, length(test$week2020))
+test <- rename(test, df = `df$submission_date`)
+for(i in 1:length(test$df)){
+    year = isoyear(test$df[i])
+    week = isoweek(test$df[i])
+    if(year == 2020){
+      test$week2020[i] <- week
+      test$week2021[i] <- -5
+    }
+    if(year == 2021){
+      test$week2020[i] <- -5
+      test$week2021[i] <- week
+    }
+  }
+  
+test$weekOf <- rep(as.Date("2000-01-01"), length(test$df))
+
+for(i in 1:length(test$week2020)){
+  year <- isoyear(test$df[i])
+  if(year == 2020){
+    weekNum = test$week2020[i]
+    test$weekOf[i] <- as.Date(ymd("2020-01-01")+ weeks(weekNum - 1))
+    print(test$weekOf[i])
+  }
+  if(year == 2021){
+    weekNum = test$week2021[i]
+    test$weekOf[i] <- as.Date(ymd("2021-01-01")+ weeks(weekNum - 1))
+    print(test$weekOf[i])
+  }
+}
+```
+
+
+```{r}
+
+
+df1 <- PfizerAlloc[which(PfizerAlloc$PfizerDose1 == PfizerAlloc$pfizerDose2),]
+df2 <- DernaAlloc[which(DernaAlloc$DernaDose1 == DernaAlloc$DernaDose2),]
+
+df1 <- df1[which(df1$jurisdiction != "Chicago"),]
+df1 <- df1[which(df1$jurisdiction != "Federal Entities"),]
+df1 <- df1[which(df1$jurisdiction != "Philadelphia"),]
+df2 <- df2[which(df2$jurisdiction != "Chicago"),]
+df2 <- df2[which(df2$jurisdiction != "Federal Entities"),]
+df2 <- df2[which(df2$jurisdiction != "Philadelphia"),]
+
+dose1p <- subset(df1, select = -c(pfizerDose2))
+dose1m <- subset(df2, select = -c(DernaDose2))
+
+dose1p$week_of_allocations <- as.Date(dose1p$week_of_allocations)
+dose1m$week_of_allocations <- as.Date(dose1m$week_of_allocations)
+## making dates match
+
+
+## IT IS OK TO TREAT THE DOSES AS THE SAME!
+# dose 1 and dose 2 are given to the same patients. they both will go into effect the same week. can iso one column for this reason. 
+# 1 week till order arrives, 5 weeks till dose works
+dose1p$allUS.Pfizer <- rep(0, length(dose1p$jurisdiction))
+for(i in 1:length(unique(dose1p$week_of_allocations))){
+  week = unique(dose1p$week_of_allocations)[i]
+  whicht = which(dose1p$week_of_allocations == week)
+  dose1p$allUS.Pfizer[whicht] <- rep(sum(dose1p[whicht,]$PfizerDose1),length(whicht))
+  
+}
+dose1p <- distinct(subset(dose1p, select = -c(jurisdiction, PfizerDose1)))
+dose1p$weekInEffect <- rep(as.Date(ymd("2000-01-01")), length(dose1p$allUS))
+for(i in 1:length(dose1p$week_of_allocations)){
+    year <- isoyear(dose1p$week_of_allocations[i])
+    if(year == 2020){
+      weekNum = isoweek(dose1p$week_of_allocations[i])
+      dose1p$weekInEffect[i] <- as.Date(ymd("2020-01-01")+ weeks(weekNum + 5))
+      print(dose1p$weekInEffect[i])
+    }
+    if(year == 2021){
+      weekNum = isoweek(dose1p$week_of_allocations[i])
+      dose1p$weekInEffect[i] <- as.Date(ymd("2021-01-01")+ weeks(weekNum + 5))
+      print(dose1p$weekInEffect[i])
+    }
+}
+
+dose1m$allUS.Moderna <- rep(0, length(dose1m$jurisdiction))
+for(i in 1:length(unique(dose1m$week_of_allocations))){
+  week = unique(dose1m$week_of_allocations)[i]
+  whicht = which(dose1m$week_of_allocations == week)
+  dose1m$allUS.Moderna[whicht] <- rep(sum(dose1m[whicht,]$DernaDose1),length(whicht))
+  
+}
+dose1m <- distinct(subset(dose1m, select = -c(jurisdiction, DernaDose1)))
+dose1m$weekInEffect <- rep(as.Date(ymd("2000-01-01")), length(dose1m$allUS))
+for(i in 1:length(dose1m$week_of_allocations)){
+    year <- isoyear(dose1m$week_of_allocations[i])
+    if(year == 2020){
+      weekNum = isoweek(dose1m$week_of_allocations[i])
+      dose1m$weekInEffect[i] <- as.Date(ymd("2020-01-01")+ weeks(weekNum + 6))
+      print(dose1m$weekInEffect[i])
+    }
+    if(year == 2021){
+      weekNum = isoweek(dose1m$week_of_allocations[i])
+      dose1m$weekInEffect[i] <- as.Date(ymd("2021-01-01")+ weeks(weekNum + 6))
+      print(dose1m$weekInEffect[i])
+    }
+}
+
+dose1p2 <- subset(dose1p, select = -c(week_of_allocations))
+dose1m2 <- subset(dose1m, select = -c(week_of_allocations))
+weekofDoses <- merge(dose1p2, dose1m2, by = "weekInEffect")
+weekofDoses$totalInEffect <- weekofDoses$allUS.Pfizer + weekofDoses$allUS.Moderna
+
+weekofDoses
+
+head(test)
+
+
+use2 <- subset(df, select = c(state, names, submission_date, new_case, new_death))
+use2$weekOfShared <- rep(as.Date(ymd("2000-01-01"), length(use2$state)))
+for(i in 1:length(use2$submission_date)){
+  ogdate <- use2$submission_date[i]
+  weekof <- test[which(test$df == ogdate),]$weekOf[1]
+  use2$weekOfShared[i] <- weekof
+}
+  
+use2 <- rename(use2, jurisdiction = names)
+dim(use2)
+use2$allUS.NewCaseDaily <- rep(-100, length(use2$jurisdiction))
+use2$allUS.NewDeathDaily <- rep(-100, length(use2$jurisdiction))  
+for(i in 1:length(unique(use2$submission_date))){
+  week <- unique(use2$submission_date)[i]
+  whicht <- which(use2$submission == week)
+  use2$allUS.NewCaseDaily[whicht] <- rep(sum(use2[whicht,]$new_case), length(whicht))
+  use2$allUS.NewDeathDaily[whicht] <- rep(sum(use2[whicht,]$new_death), length(whicht))
+}
+use2$allUS.NewCaseWeekly <- rep(-100, length(use2$submission_date))
+use2$allUS.NewDeathWeekly <- rep(-100, length(use2$submission_date))  
+for(i in 1:length(unique(use2$weekOfShared))){
+  week <- unique(use2$weekOfShared)[i]
+  whicht <- which(use2$weekOfShared == week)
+  use2$allUS.NewCaseWeekly[whicht] <- rep(sum(use2[whicht,]$new_case), length(whicht))
+  use2$allUS.NewDeathWeekly[whicht] <- rep(sum(use2[whicht,]$new_death), length(whicht))
+}
+use2 <- subset(use2, select = -c(state, jurisdiction))
+use2 <- subset(use2, select = -c(new_case, new_death))
+use2 <- distinct(use2)
+  
+combinedData <- merge(use2, weekofDoses, by.x = "weekOfShared", by.y = "weekInEffect", all.x = TRUE)
+dim(combinedData)
+head(combinedData)
+
+
+```
+
+
+```{r}
+
+ggplot() +
+  geom_point(data = combinedData, aes(x = submission_date, y = allUS.NewCaseDaily), color = "violetred1") +
+  ylim(0, max(combinedData$allUS.NewCaseDaily)) +
+  ylab("US New Cases") +
+  xlab("Date") +
+  ggtitle("New Cases by Date") +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))+
+  scale_x_date(date_labels = "%b%Y", date_breaks = "2 months") +
+  theme(axis.text.x = element_text(angle=45, hjust = 1))+
+  geom_smooth(data = combinedData, aes(x = weekOfShared, y = totalInEffect/100), color = "darkblue")+
+  geom_point(data = combinedData, aes(x = weekOfShared, y = totalInEffect/100), color = "darkblue") + 
+  geom_point(data = combinedData, aes(x = (weekOfShared - weeks(3)) - days(3), y = totalInEffect/100), color = "blue", alpha = .25)+
+  geom_vline(xintercept = min(jointVacc$week_of_allocations) + weeks(1))
+
+
+
+```
+
+```{r}
+
+head(DistributedVaccines)
+DistributedVaccines$new_admin <- rep(0, length(DistributedVaccines$administered))
+DistributedVaccines <- DistributedVaccines[order(as.Date(DistributedVaccines$date)),]
+
+for(i in 1:length(unique(DistributedVaccines$location))){
+  state <- unique(DistributedVaccines$location)[i]
+  DistributedVaccines %>% 
+    filter(DistributedVaccines$location == state) -> q
+  for(z in 1:length(q$date)){
+    date <- q$date[z]
+    which1 <- which(DistributedVaccines$date == date & DistributedVaccines$location == state)
+    if(z == 1){
+      DistributedVaccines$new_admin[which1] <- DistributedVaccines$administered[which1]
+    }
+    else{
+      date2 <- q$date[z-1]
+      which2 <- which(DistributedVaccines$date == date2 & DistributedVaccines$location == state)
+      DistributedVaccines$new_admin[which1] <- DistributedVaccines$administered[which1] - DistributedVaccines$administered[which2]
+    }
+  }
+}
+
+dv <- subset(DistributedVaccines, select = c(date, location, new_admin))
+df5 <- subset(df, select = c(state, submission_date, new_case))
+
+toPlot <- merge(df5, dv, by.x = c("state","submission_date"), by.y = c("location", "date"), all.x = T)
+
+toPlot %>% 
+  filter(toPlot$state %in% c("CA", "TX", "FL", "IL", "PA")) %>% 
+  ggplot()+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "CA"), aes(x = submission_date, y = new_case), color = "red", se = F)+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "TX"), aes(x = submission_date, y = new_case), color = "orange", se = F) +
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "FL"), aes(x = submission_date, y = new_case), color = "yellow", se = F)+  
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "IL"), aes(x = submission_date, y = new_case), color = "green", se = F)+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "PA"), aes(x = submission_date, y = new_case), color = "blue", se = F)+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "CA"), aes(x = submission_date, y = new_admin/10), color = "red", se = F, linetype = "dashed")+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "TX"), aes(x = submission_date, y = new_admin/10), color = "orange", se = F,linetype = "dashed") +
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "FL"), aes(x = submission_date, y = new_admin/10), color = "yellow", se = F, linetype = "dashed")+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "IL"), aes(x = submission_date, y = new_admin/10), color = "green", se = F, linetype = "dashed")+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "PA"), aes(x = submission_date, y = new_admin/10), color = "blue", se = F, linetype = "dashed")+
+  scale_x_date(name = "Date", date_breaks = "1 month", date_labels = "%b%Y")+
+  theme(axis.text.x = element_text(angle = 30)) +
+  ylab("New Cases") +
+  ggtitle("New Cases & Vaccinations per Day in Top 5 States") +
+  xlab("Date")
+
+
+
+
+
+
+
+```
+
+```{r}
+
+# North Dakota, Rhode Island, South Dakota, Utah, Tenn
+
+toPlot %>% 
+  filter(new_case >= 0) %>% 
+  filter(state %in% c("ND", "RI","SD","UT","TN"))
+  
+ggplot()+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "ND"), aes(x = submission_date, y = new_case), color = "red", se = F)+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "RI"), aes(x = submission_date, y = new_case), color = "orange", se = F) +
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "SD"), aes(x = submission_date, y = new_case), color = "yellow", se = F)+  
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "UT"), aes(x = submission_date, y = new_case), color = "green", se = F)+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "TN"), aes(x = submission_date, y = new_case), color = "blue", se = F)+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "ND"), aes(x = submission_date, y = new_admin/10), color = "red", se = F, linetype = "dashed")+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "RI"), aes(x = submission_date, y = new_admin/10), color = "orange", se = F,linetype = "dashed") +
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "SD"), aes(x = submission_date, y = new_admin/10), color = "yellow", se = F, linetype = "dashed")+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "UT"), aes(x = submission_date, y = new_admin/10), color = "green", se = F, linetype = "dashed")+
+  geom_smooth(data = toPlot %>% filter(toPlot$state == "TN"), aes(x = submission_date, y = new_admin/10), color = "blue", se = F, linetype = "dashed")+
+  scale_x_date(name = "Date", date_breaks = "1 month", date_labels = "%b%Y")+
+  theme(axis.text.x = element_text(angle = 30)) +
+  ylab("New Cases") +
+  ggtitle("New Cases & Vaccinations per Day in Top 5 States by Pop") +
+  xlab("Date") +
+  ylim(0,7500)
+
+```
+
+
+
+
+```{r}
+
+DistributedVaccines <- read.socrata(
+  "https://data.cdc.gov/resource/unsk-b7fc.csv",
+  app_token = Sys.getenv("CDC_API"),
+  email     = "arway@ucdavis.edu",
+  password = Sys.getenv("Password")
+)
+
+DistributedVaccines <- subset(DistributedVaccines, select = c(date, location, distributed, distributed_moderna, distributed_pfizer, dist_per_100k, administered, administered_moderna, administered_pfizer, series_complete_pop_pct, series_complete_moderna, series_complete_pfizer, series_complete_12plus, series_complete_18plus, series_complete_65plus))
+
+```
+
+
+```{r}
+
+hist(df$new_case)
+
+df <- merge(df, pop, by.x = "names.x", by.y = "State")
+
+df %>% 
+  filter(df$submission_date == max(df$submission_date)) %>% 
+  subset(select = -c(submission_date, conf_cases, prob_cases, pnew_case, conf_death, prob_death, pnew_death, created_at, consent_cases, consent_deaths, names.y)) -> p
+
+p$totByPop <- (p$tot_cases / p$X2018.Population)
+p$totSinceVaccinations <- 
+  
+p[order(p$tot_cases, decreasing = T),]
+#Cali, Texas, Florida, Illinois, Penn
+p[order(p$totByPop, decreasing = T),]
+# North Dakota, Rhode Island, South Dakota, Utah, Tenn
+
+
+
+```
+
+```{r}
+
+names(df2)
+df2 <- df[which(df$submission_date == max(df$submission_date) | df$submission_date == as.Date("2020-03-15")),]
+df2 <- df2[!is.na("consent_cases"),]
+df2 <- df2[!is.na("consent_deaths"),]
+df3 <- subset(df2, select = -c(conf_cases, prob_cases, pnew_case, conf_death, prob_death, pnew_death, created_at, consent_cases, consent_deaths))
+names(df3)
+df3$mortality <- df3$tot_death / df3$tot_cases
+df4 <- merge(df3, toPlot, by = c("state", "submission_date", "new_case"))
+df4 <- subset(df4, select = -c(names.y, X2018.Population))
+df5 <- merge(df4, pop, by.x = "names.x", by.y = "State")
+
+df5$casesByPop <- df5$tot_cases / df5$X2018.Population
+df6 <- subset(df5, select = c(new_case, tot_cases, new_death, tot_death, new_admin, mortality, casesByPop))
+df6[which(is.na(df6$new_admin)),]$new_admin <- rep(0, length(which(is.na(df6$new_admin))))
+df6[which(is.na(df6$mortality)),]$mortality <- 0
+pca <- princomp(df6, cor = TRUE, scores = T)
+summary(pca, loadings = T, cutoff = .2)
+
+##pca1 done 
+
+
+plot(pca, type = "line")
+
+library(factoextra)
+fviz_eig(pca)
+
+
+```
+
+```{r}
+
+biplot(x = pca, main = "Biplot for Cereal data using Cor",
+pc.biplot = TRUE)
+
+fviz_pca_ind(pca,
+col.ind = "cos2", # Color by the quality of representation
+gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+repel = TRUE # Avoid text overlapping
+)
+
+fviz_pca_ind(pca1,
+col.ind = "cos2", # Color by the quality of representation
+gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+repel = TRUE # Avoid text overlapping
+)
+
+plot(as.data.frame(pca$scores)$Comp.3, as.data.frame(pca$scores)$Comp.4)
+
+```
+
+
+```{r}
+fviz_pca_var(pca,
+col.var = "contrib", # Color by contributions to the PC
+gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+repel = TRUE # Avoid text overlapping
+)
+
+fviz_pca_var(pca1,
+col.var = "contrib", # Color by contributions to the PC
+gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+repel = TRUE # Avoid text overlapping
+)
+
+
+
+```
+
+
+
+
+```{r}
+df2 <- df[which(df$submission_date == as.Date("2020-04-01") | df$submission_date == as.Date("2021-01-07")),]
+df2 <- df2[!is.na("consent_cases"),]
+df2 <- df2[!is.na("consent_deaths"),]
+df3 <- subset(df2, select = -c(conf_cases, prob_cases, pnew_case, conf_death, prob_death, pnew_death, created_at, consent_cases, consent_deaths))
+names(df3)
+df3$mortality <- df3$tot_death / df3$tot_cases
+df4 <- merge(df3, toPlot, by = c("state", "submission_date", "new_case"))
+df4 <- subset(df4, select = -c(names.y, X2018.Population))
+df5 <- merge(df4, pop, by.x = "names.x", by.y = "State")
+
+df5$casesByPop <- df5$tot_cases / df5$X2018.Population
+df6 <- subset(df5, select = c(new_case, tot_cases, new_death, tot_death, new_admin, mortality, casesByPop))
+df6[which(is.na(df6$new_admin)),]$new_admin <- rep(0, length(which(is.na(df6$new_admin))))
+pca1 <- princomp(df6, cor = TRUE, scores = T)
+summary(pca1, loadings = T, cutoff = .2)
+
+
+
+```
+
+
+```{r}
+
+df2 <- df
+df2 <- df2[!is.na("consent_cases"),]
+df2 <- df2[!is.na("consent_deaths"),]
+df3 <- subset(df2, select = -c(conf_cases, prob_cases, pnew_case, conf_death, prob_death, pnew_death, created_at, consent_cases, consent_deaths))
+names(df3)
+df3$mortality <- df3$tot_death / df3$tot_cases
+df4 <- merge(df3, toPlot, by = c("state", "submission_date", "new_case"))
+df4 <- subset(df4, select = -c(names.y, X2018.Population))
+df5 <- merge(df4, pop, by.x = "names.x", by.y = "State")
+df5$casesByPop <- df5$tot_cases / df5$X2018.Population
+df6 <- df5
+df6[which(is.na(df6$new_admin)),]$new_admin <- rep(0, length(which(is.na(df6$new_admin))))
+df6[which(is.na(df6$mortality)),]$mortality <- rep(0, length(which(is.na(df6$mortality))))
+
+summary(glm(new_case ~ new_admin + submission_date, data = df6))
+
+df6 <- df6[which(df6$submission_date >= as.Date("2021-01-01")),]
+head(df6)
+
+summary(lm(new_case ~ new_admin, data = df6))
+
+df6$new_admin2 <- df6$new_admin^2
+
+summary(lm(new_case ~ new_admin + new_admin2, data = df6))
+```
+
+
+
+```{r}
+
+df7 <- subset(df6, select = c(new_case, tot_cases, new_death, tot_death, new_admin,  mortality, casesByPop))
+pp <- princomp(df7, cor = T, scores = T)
+summary(pp, loadings = T)
+
+summary(glm(new_case ~ new_admin, data = df7))
+
+```
+
+```{r}
+df6$total_vacc <- rep(0, length(df6$new_admin))
+for(i in 1:length(unique(df6$state))){
+  state = unique(df6$state)[i]
+  temp <- df6[which(df6$state == state),]
+  df6[which(df6$state == state),]$total_vacc <- sum(temp$new_admin)
+}
+
+df6$vaccByPop <- (df6$total_vacc/2) / df6$X2018.Population
+
+df8 <- df6[df6$submission_date == max(df6$submission_date),]
+b5 <- tail(df8[order(df8$casesByPop),], 5)
+
+b5 <- b5[order(b5$casesByPop, decreasing = T),]
+
+b5[,c("names.x", "casesByPop")]
+
+b5$deathsByPop <- (b5$tot_death * 1000) / b5$X2018.Population
+b5[,c("names.x", "deathsByPop")]
+
+b5[,c("names.x", "mortality")]
+
+b5$vaccByPop <- (b5$total_vacc / 2) / b5$X2018.Population
+b5[,c("names.x", "vaccByPop")]
+
+```
+
+
